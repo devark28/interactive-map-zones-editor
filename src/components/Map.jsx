@@ -8,16 +8,7 @@ import {
 const scriptLibraries = ['drawing', 'geometry', 'marker'];
 
 function Map({onChange, drawingMode, onDrawingModeChange, onReady, googleMapsApiKey, mapContainerStyle, center}) {
-  const [internalDrawingMode, setInternalDrawingMode] = useState(null);
   const [googleMapsApi, setGoogleMapsApi] = useState(null);
-
-  useEffect(() => {
-    setInternalDrawingMode(drawingMode);
-  }, [drawingMode])
-
-  useEffect(() => {
-    onDrawingModeChange(internalDrawingMode);
-  }, [internalDrawingMode, onDrawingModeChange])
 
   useEffect(() => {
     googleMapsApi && onReady();
@@ -107,7 +98,7 @@ function Map({onChange, drawingMode, onDrawingModeChange, onReady, googleMapsApi
     logShapeData(shape, type);
 
     // Reset the drawing mode
-    setInternalDrawingMode(null);
+    onDrawingModeChange(null);
   };
 
   return (
@@ -132,7 +123,7 @@ function Map({onChange, drawingMode, onDrawingModeChange, onReady, googleMapsApi
       >
         {googleMapsApi ? (
           <DrawingManager
-            drawingMode={internalDrawingMode} // CONTROL DRAWING MODE WITH STATE
+            drawingMode={drawingMode} // CONTROL DRAWING MODE WITH STATE
             onOverlayComplete={handleOverlayComplete}
             options={{
               drawingControl: false, // HIDE THE DEFAULT CONTROL
