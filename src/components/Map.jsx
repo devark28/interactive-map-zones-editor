@@ -1,65 +1,71 @@
-import React, {useState, useCallback, useEffect} from 'react';
-import {
-  GoogleMap,
-  LoadScript,
-  DrawingManager,
-} from '@react-google-maps/api';
+import React, {useEffect, useRef, useCallback} from 'react';
+import {APIProvider, Map as GoogleMap, useMap, useMapsLibrary} from '@vis.gl/react-google-maps';
 
 const scriptLibraries = ['drawing', 'geometry', 'marker'];
 
 function Map({onChange, drawingMode, onDrawingModeChange, onReady, googleMapsApiKey, mapContainerStyle, center}) {
-  const [googleMapsApi, setGoogleMapsApi] = useState(null);
+  return (
+    <APIProvider apiKey={googleMapsApiKey} libraries={scriptLibraries}>
+      <div style={{overflow: "hidden", ...mapContainerStyle}}>
+        <GoogleMap
+          mapId="aPjEtS0by8"
+          defaultCenter={center}
+          defaultZoom={10}
+          streetViewControl={false}
+          mapTypeControl={false}
+          fullscreenControl={false}
+          style={{width: '100%', height: '100%'}}
+        >
+          <DrawingManagerBridge
+            drawingMode={drawingMode}
+            onChange={onChange}
+            onDrawingModeChange={onDrawingModeChange}
+            onReady={onReady}
+          />
+        </GoogleMap>
+      </div>
+    </APIProvider>
+  );
+}
 
-  useEffect(() => {
-    googleMapsApi && onReady();
-  }, [googleMapsApi, onReady])
+function DrawingManagerBridge({drawingMode, onChange, onDrawingModeChange, onReady}) {
+  const map = useMap();
+  const drawing = useMapsLibrary('drawing');
+  const geometry = useMapsLibrary('geometry');
 
-  const handleApiLoaded = useCallback((map, maps) => {
-    setGoogleMapsApi(maps)
-  }, []);
+  const managerRef = useRef(null);
 
-  const logShapeData = (shape, type) => {
+  const logShapeData = useCallback((shape, type) => {
     if (type === 'polyline') {
-      const coords = shape
-        .getPath()
-        .getArray()
-        .map((p) => [p.lng(), p.lat()]);
-      onChange({
+      const coords = shape.getPath().getArray().map((p) => [p.lng(), p.lat()]);
+      onChange && onChange({
         type: 'LineString',
         coordinates: coords,
       });
     } else if (type === 'polygon') {
-      const coords = shape
-        .getPath()
-        .getArray()
-        .map((p) => [p.lng(), p.lat()]);
-      onChange({
+      const coords = shape.getPath().getArray().map((p) => [p.lng(), p.lat()]);
+      onChange && onChange({
         type: 'Polygon',
         coordinates: [coords],
       });
-    } else if (type === 'circle') {
+    } else if (type === 'circle' && geometry) {
       const center = shape.getCenter();
       const radius = shape.getRadius(); // in meters
-
-      const steps = 64; // the more steps, the smoother the circle
-
+      const steps = 64;
       const coords = [];
-
       for (let i = 0; i <= steps; i++) {
-        // Offset in degrees using ~111km per degree approximation
-        const point = googleMapsApi.geometry.spherical.computeOffset(center, radius, (i * 360) / steps);
+        const point = geometry.spherical.computeOffset(center, radius, (i * 360) / steps);
         coords.push([point.lng(), point.lat()]);
       }
-      const geojsonCircle = {
+      onChange && onChange({
         type: 'Polygon',
         coordinates: [coords],
-      };
-      onChange(geojsonCircle);
+      });
     } else if (type === 'rectangle') {
       const bounds = shape.getBounds();
       const northEast = bounds.getNorthEast();
       const southWest = bounds.getSouthWest();
-      onChange({
+      onChange && onChange({
         type: 'Polygon',
         coordinates: [[
           [southWest.lng(), northEast.lat()],
@@ -70,108 +76,91 @@ function Map({onChange, drawingMode, onDrawingModeChange, onReady, googleMapsApi
         ]],
       });
     }
-  };
+  }, [geometry, onChange]);
 
-  const handleOverlayComplete = (e) => {
-    const shape = e.overlay;
-    const type = e.type;
+  useEffect(() => {
+    if (!map || !drawing) return;
 
-    // Add an event listener to the shape for changes
-    if (type === 'polygon' || type === 'polyline') {
-      // For polylines and polygons, listen to path changes
-      googleMapsApi.event.addListener(shape.getPath(), 'set_at', () => {
-        logShapeData(shape, type);
-      });
-      googleMapsApi.event.addListener(shape.getPath(), 'insert_at', () => {
-        logShapeData(shape, type);
-      });
-    } else if (type === 'circle' || type === 'rectangle') {
-      // For circles and rectangles, listen to center and bounds changes
-      googleMapsApi.event.addListener(shape, 'bounds_changed', () => {
-        logShapeData(shape, type);
-      });
-      googleMapsApi.event.addListener(shape, 'radius_changed', () => {
-        logShapeData(shape, type);
-      });
-    }
+    const manager = new drawing.DrawingManager({
+      drawingMode: drawingMode ?? null,
+      drawingControl: false,
+      polylineOptions: {
+        strokeColor: '#FF0000',
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        clickable: true,
+        editable: true,
+        zIndex: 1
+      },
+      polygonOptions: {
+        fillColor: '#00FF00',
+        fillOpacity: 0.35,
+        strokeColor: '#00FF00',
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        clickable: true,
+        editable: true,
+        zIndex: 1
+      },
+      circleOptions: {
+        fillColor: '#0000FF',
+        fillOpacity: 0.35,
+        strokeColor: '#0000FF',
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        clickable: true,
+        editable: true,
+        zIndex: 1
+      },
+      rectangleOptions: {
+        fillColor: '#FFA500',
+        fillOpacity: 0.35,
+        strokeColor: '#FFA500',
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        clickable: true,
+        editable: true,
+        zIndex: 1
+      }
+    });
 
-    logShapeData(shape, type);
+    manager.setMap(map);
+    managerRef.current = manager;
 
-    // Reset the drawing mode
-    onDrawingModeChange(null);
-  };
+    const overlayCompleteListener = manager.addListener('overlaycomplete', (e) => {
+      const shape = e.overlay;
+      const type = e.type;
 
-  return (
-    <LoadScript
-      googleMapsApiKey={googleMapsApiKey}
-      libraries={scriptLibraries}
-    >
-      <GoogleMap
-        center={center}
-        mapContainerStyle={mapContainerStyle}
-        zoom={10}
-        onLoad={(map) => {
-          handleApiLoaded(map, window.google.maps);
-        }}
-        options={{
-          mapId: "aPjEtS0by8",
-          fullscreenControl: false,
-          streetViewControl: false,
-          cameraControl: false,
-          mapTypeControl: false,
-        }}
-      >
-        {googleMapsApi ? (
-          <DrawingManager
-            drawingMode={drawingMode} // CONTROL DRAWING MODE WITH STATE
-            onOverlayComplete={handleOverlayComplete}
-            options={{
-              drawingControl: false, // HIDE THE DEFAULT CONTROL
-              polylineOptions: {
-                strokeColor: '#FF0000', // Red stroke for polylines
-                strokeOpacity: 0.8,
-                strokeWeight: 2,
-                clickable: true,
-                editable: true,
-                zIndex: 1
-              },
-              polygonOptions: {
-                fillColor: '#00FF00', // Green fill for polygons
-                fillOpacity: 0.35,
-                strokeColor: '#00FF00', // Green stroke for polygons
-                strokeOpacity: 0.8,
-                strokeWeight: 2,
-                clickable: true,
-                editable: true,
-                zIndex: 1
-              },
-              circleOptions: {
-                fillColor: '#0000FF', // Blue fill for circles
-                fillOpacity: 0.35,
-                strokeColor: '#0000FF', // Blue stroke for circles
-                strokeOpacity: 0.8,
-                strokeWeight: 2,
-                clickable: true,
-                editable: true,
-                zIndex: 1
-              },
-              // ADD THIS FOR RECTANGLE STYLING
-              rectangleOptions: {
-                fillColor: '#FFA500', // Orange fill for rectangles
-                fillOpacity: 0.35,
-                strokeColor: '#FFA500', // Orange stroke for rectangles
-                strokeOpacity: 0.8,
-                strokeWeight: 2,
-                clickable: true,
-                editable: true,
-                zIndex: 1
-              }
-            }}
-          />
-        ) : null}
-      </GoogleMap>
-    </LoadScript>
-  );
+      if (type === 'polygon' || type === 'polyline') {
+        const path = shape.getPath();
+        path.addListener('set_at', () => logShapeData(shape, type));
+        path.addListener('insert_at', () => logShapeData(shape, type));
+      } else if (type === 'circle') {
+        shape.addListener('center_changed', () => logShapeData(shape, type));
+        shape.addListener('radius_changed', () => logShapeData(shape, type));
+      } else if (type === 'rectangle') {
+        shape.addListener('bounds_changed', () => logShapeData(shape, type));
+      }
+
+      logShapeData(shape, type);
+      onDrawingModeChange && onDrawingModeChange(null);
+    });
+
+    onReady && onReady();
+
+    return () => {
+      if (overlayCompleteListener) overlayCompleteListener.remove();
+      manager.setMap(null);
+      managerRef.current = null;
+    };
+  }, [map, drawing, logShapeData, onDrawingModeChange, onReady, drawingMode]);
+
+  useEffect(() => {
+    if (!managerRef.current) return;
+    managerRef.current.setDrawingMode(drawingMode ?? null);
+  }, [drawingMode]);
+
+  return null;
 }
 
 export default React.memo(Map);
