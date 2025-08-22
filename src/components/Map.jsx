@@ -107,7 +107,7 @@ function DrawingManagerBridge({drawingMode, onChange, onDrawingModeChange, onRea
       properties: {
         id,
         kind: type,
-      }, // Optional for some visualizers
+      }, // Required for some visualizers like https://geojson.io
       geometry: geometryObj
     });
   }, [onChange, toGeoJSON]);

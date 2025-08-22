@@ -16,7 +16,7 @@ function App() {
   const handleButtonClick = (mode) => setDrawingMode(mode);
 
   const handleShapeChange = (payload) => {
-    // payload: {id, kind, geometry}
+    // payload: {id, properties: { kind, geometry }}
     setFeatures((prev) => {
       const idx = prev.findIndex((f) => f.id === payload.properties.id);
       if (idx === -1) {
