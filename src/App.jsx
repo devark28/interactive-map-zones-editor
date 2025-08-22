@@ -18,7 +18,7 @@ function App() {
   const handleShapeChange = (payload) => {
     // payload: {id, kind, geometry}
     setFeatures((prev) => {
-      const idx = prev.findIndex((f) => f.id === payload.id);
+      const idx = prev.findIndex((f) => f.id === payload.properties.id);
       if (idx === -1) {
         return [...prev, payload];
       }

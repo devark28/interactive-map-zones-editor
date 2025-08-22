@@ -103,8 +103,11 @@ function DrawingManagerBridge({drawingMode, onChange, onDrawingModeChange, onRea
     const geometryObj = toGeoJSON(overlay, type);
     if (!geometryObj) return;
     onChange && onChange({
-      id,
-      kind: type,
+      type: 'Feature',
+      properties: {
+        id,
+        kind: type,
+      }, // Optional for some visualizers
       geometry: geometryObj
     });
   }, [onChange, toGeoJSON]);
